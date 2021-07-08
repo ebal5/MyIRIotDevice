@@ -5,11 +5,8 @@
 #include <WiFi.h>
 #include <mbedtls/md.h>
 #include <WiFiClientSecure.h>
-#include <MQTTClient.h>
-#include <ArduinoJson.hpp>
-
-
-unsigned long lastIdSend = 0;
+#include <MQTT.h>
+#include <ArduinoJson.h>
 
 bool setupWiFi()
 {
@@ -62,46 +59,62 @@ bool setupWiFi()
     return WiFi.isConnected();
 }
 
-void setupMqttIds(String groupID, String deviceID)
+void setupMqttIds(String groupID, String deviceID, MQTTClient *client)
 {
+    static unsigned long lastIdSend = 0;
     unsigned long now = millis();
     if (lastIdSend == 0 || now - lastIdSend >= 5000)
     {
+        StaticJsonDocument<200> doc;
+        char buffer[256];
+        String test;
+        doc["groupId"] = groupID;
+        doc["devId"] = deviceID;
+        doc["millis"] = now;
+        size_t n = serializeJson(doc, buffer);
+        // client->publish("identity/request", buffer);
+        client->publish("identity/request", buffer, n);
+        // client->publish("identity/request", "hello");
+        Serial.println("Sending ID Request to Broker...");
+        Serial.println(buffer);
+        client->subscribe("identity/provide");
         lastIdSend = now;
     }
 }
 
-void reconnectMqtt(MQTTClient client, String clientID, String user, String pass)
+void reconnectMqtt(MQTTClient *client, const char *clientID, const char *user, const char *pass)
 {
-    while (!client.connected())
+    Serial.print("checking wifi...");
+    while (WiFi.status() != WL_CONNECTED)
     {
-        Serial.print("Attempting MQTT connection...");
-        if (!client.connect(clientID.c_str(), user.c_str(), pass.c_str(), false))
-        {
-            Serial.print("failed, rc=");
-            Serial.print(client.lastError());
-            Serial.println(" try again in 2 seconds");
-            delay(2000);
-        }
-        else
-        {
-            Serial.println("connected");
-        }
+        Serial.print(".");
+        delay(1000);
     }
+
+    Serial.print("\nconnecting...");
+
+    while (!client->connect(clientID, user, pass))
+    {
+        Serial.print(".");
+        delay(1000);
+    }
+
+    Serial.println("\nconnected!");
+    client->subscribe("identity/provide");
 }
 
 bool setupMqtt(String server, const uint16_t port, MQTTClientCallbackSimple callback, WiFiClient *net, MQTTClient *client)
 {
-    client->setHost(server.c_str(), (int)port);
     client->onMessage(callback);
+    client->begin(server.c_str(), port, *net);
     return true;
 }
 
 bool setupMqtts(String server, const uint16_t port, const char *CACert, MQTTClientCallbackSimple callback, WiFiClientSecure *net, MQTTClient *client)
 {
     net->setCACert(CACert);
-    client->setHost(server.c_str(), (int)port);
     client->onMessage(callback);
+    client->begin(server.c_str(), port, *net);
     return true;
 }
 
