@@ -72,9 +72,7 @@ void setupMqttIds(String groupID, String deviceID, MQTTClient *client)
         doc["devId"] = deviceID;
         doc["millis"] = now;
         size_t n = serializeJson(doc, buffer);
-        // client->publish("identity/request", buffer);
         client->publish("identity/request", buffer, n);
-        // client->publish("identity/request", "hello");
         Serial.println("Sending ID Request to Broker...");
         Serial.println(buffer);
         client->subscribe("identity/provide");
