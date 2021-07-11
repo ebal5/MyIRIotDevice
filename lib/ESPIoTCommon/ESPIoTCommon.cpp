@@ -158,6 +158,29 @@ void createIDs(String *gid, String *did, String pepper)
     Serial.printf("%10s : %s\n", "deviceID", did->c_str());
 }
 
+void gotMqttIds(String groupID, String deviceID, String payload, uint32_t *mqttGID, uint32_t *mqttDID, MQTTClient *client)
+{
+    StaticJsonDocument<512> doc;
+    DeserializationError e = deserializeJson(doc, payload);
+    if (e)
+    {
+        Serial.println("Deserialization failed");
+        doc.clear();
+        doc["status"] = "Failed";
+        doc["topic"] = "identity/provide";
+        doc["msg"] = "Deserialization failed in identity/provide";
+        doc["device"] = deviceID;
+        client->publish("log/error");
+        return;
+    }
+    if (deviceID.compareTo(doc["target"]) == 0)
+    {
+        *mqttGID = doc["groupId"].as<uint32_t>();
+        *mqttDID = doc["deviceId"].as<uint32_t>();
+        client->unsubscribe("identity/provide");
+    }
+}
+
 bool serialSetup()
 {
     return serialSetup(DefaultBaudRate);

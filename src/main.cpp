@@ -13,7 +13,7 @@
 #define MAX_BUFFER_SIZE 16384
 
 String deviceID, groupID;
-uint32_t mqttGID, mqttDID;
+uint32_t mqttGID = 0, mqttDID = 0;
 WiFiClientSecure net;
 MQTTClient client(MAX_BUFFER_SIZE); /* TODO: バッファサイズの調整． */
 
@@ -50,10 +50,21 @@ void mqttCallBack(String &topic, String &payload)
   }
   else if (String("identity/provide").compareTo(topic) == 0)
   {
-    StaticJsonDocument<512> doc;
-    DeserializationError e = deserializeJson(doc, payload);
-    // TODO: implement
-    // Blah blah blah
+    gotMqttIds(groupID, deviceID, payload, &mqttGID, &mqttDID, &client);
+    if (mqttGID != 0 && mqttDID != 0)
+    {
+      char myDevId[10];
+      sprintf(myDevId, "%d", mqttDID);
+      myRecvTopic = "ir/";
+      myRecvTopic += myDevId;
+      myDumpTopic = myRecvTopic;
+      mySendTopic = myRecvTopic;
+      myRecvTopic += "_recv";
+      myDumpTopic += "_dump";
+      mySendTopic += "_send";
+      client.subscribe(myRecvTopic.c_str());
+      client.subscribe(mySendTopic.c_str());
+    }
   }
 }
 
@@ -86,7 +97,7 @@ void irRxTask(void *arg)
     {
       Serial.printf(D_WARN_BUFFERFULL "\n", kCaptureBufferSize);
       doc["status"] = "Failed";
-      doc["message"] = "Size up the Buffer lager.";
+      doc["msg"] = "Size up the Buffer lager.";
       char *jsonBuffer = (char *)malloc(MAX_BUFFER_SIZE);
       size_t n = serializeJson(doc, jsonBuffer, MAX_BUFFER_SIZE);
       client.publish(myDumpTopic.c_str(), jsonBuffer, n);
