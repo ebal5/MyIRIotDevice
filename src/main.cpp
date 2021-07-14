@@ -34,7 +34,7 @@ decode_results results;
 IRsend irsend(irTxPin);
 String mySendTopic, myRecvTopic, myDumpTopic;
 
-// void irTxTask(void *arg);
+void irTxTask(void *arg);
 void irRxTask(void *arg);
 
 void mqttCallBack(String &topic, String &payload)
@@ -42,7 +42,41 @@ void mqttCallBack(String &topic, String &payload)
   Serial.println("incoming: " + topic + " - " + payload);
   if (mySendTopic.compareTo(topic) == 0)
   {
-    // TODO: implement
+    DynamicJsonDocument doc(MAX_BUFFER_SIZE);
+    DeserializationError e = deserializeJson(doc, payload);
+    if (e)
+    {
+      Serial.println("Deserialization Error");
+      doc.clear();
+      doc["status"] = "Failed";
+      doc["topic"] = mySendTopic;
+      doc["msg"] = "Deserialization failed in " + mySendTopic;
+      doc["device"] = deviceID;
+      client.publish("log/error");
+      return;
+    }
+    uint16_t *rawData = (uint16_t *)malloc(sizeof(uint16_t) * 1500);
+    String type = doc["type"].as<String>();
+    rawData[0] = 0;
+    if (type.compareTo("raw") == 0)
+    {
+      JsonArray signal = doc["signal"];
+      int i = 1;
+      for (JsonVariant v : signal)
+      {
+        rawData[i] = v.as<uint16_t>();
+        i++;
+      }
+      rawData[0] = i-1;
+    }
+    else if (type.compareTo("command"))
+    {
+      // TODO: implement.
+    }
+    if (rawData[0] != 0)
+    {
+      xTaskCreatePinnedToCore(irTxTask, "ir send", 4096, (void*)rawData, 1, NULL, tskNO_AFFINITY);
+    }
   }
   else if (myRecvTopic.compareTo(topic) == 0)
   {
@@ -86,7 +120,15 @@ void setup()
   irrecv.enableIRIn();
 }
 
-// void irTxTask(void *arg);
+void irTxTask(void *arg)
+{
+  size_t n = ((uint16_t*)arg)[0];
+  uint16_t *rawData = ((uint16_t*)arg + 1);
+  irsend.sendRaw(rawData, n, 38);
+  free(arg);
+  vTaskDelete(NULL);
+}
+
 void irRxTask(void *arg)
 {
   vTaskDelay(3000 / portTICK_PERIOD_MS);
