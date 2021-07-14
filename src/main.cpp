@@ -13,7 +13,8 @@
 #define MAX_BUFFER_SIZE 16384
 
 String deviceID, groupID;
-uint32_t mqttGID = 0, mqttDID = 0;
+uint32_t mqttGID = 0;
+uint32_t mqttDID = 0;
 WiFiClientSecure net;
 MQTTClient client(MAX_BUFFER_SIZE); /* TODO: バッファサイズの調整． */
 
@@ -35,7 +36,7 @@ IRsend irsend(irTxPin);
 String mySendTopic, myRecvTopic, myDumpTopic;
 
 void irTxTask(void *arg);
-void irRxTask(void *arg);
+void irRxTask();
 
 void mqttCallBack(String &topic, String &payload)
 {
@@ -80,7 +81,7 @@ void mqttCallBack(String &topic, String &payload)
   }
   else if (myRecvTopic.compareTo(topic) == 0)
   {
-    xTaskCreatePinnedToCore(irRxTask, "ir recv", 4096, NULL, 1, NULL, tskNO_AFFINITY);
+    irRxTask();
   }
   else if (String("identity/provide").compareTo(topic) == 0)
   {
@@ -129,9 +130,8 @@ void irTxTask(void *arg)
   vTaskDelete(NULL);
 }
 
-void irRxTask(void *arg)
+void irRxTask()
 {
-  vTaskDelay(3000 / portTICK_PERIOD_MS);
   if (irrecv.decode(&results))
   {
     DynamicJsonDocument doc(MAX_BUFFER_SIZE);
@@ -148,6 +148,7 @@ void irRxTask(void *arg)
     else
     {
       DynamicJsonDocument signal(MAX_BUFFER_SIZE);
+      Serial.println(resultToHumanReadableBasic(&results));
       uint16_t *rawArray = resultToRawArray(&results);
       for (auto i = 0; i < results.rawlen - 1; i++)
       {
@@ -161,7 +162,6 @@ void irRxTask(void *arg)
       free(jsonBuffer);
     }
   }
-  vTaskDelete(NULL);
 }
 
 void loop()
